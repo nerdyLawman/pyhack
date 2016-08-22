@@ -150,7 +150,8 @@ class Object:
 
   def draw(self):
       if libtcod.map_is_in_fov(fov_map, self.x, self.y):
-          libtcod.console_set_default_foreground(con, self.color)
+          libtcod.console_set_default_foreground(self.con, self.color)
+          libtcod.console_set_char_background(self.con, self.x, self.y, self.color, libtcod.BKGND_SET)
           libtcod.console_put_char(self.con, self.x, self.y, self.char, libtcod.BKGND_NONE)
 
   def clear(self):
@@ -228,9 +229,9 @@ def render_all():
                             libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
                 else:
                     if wall:
-                        libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
+                        libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET)
                     else:
-                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
+                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET)
                     stagemap[x][y].explored = True
 
     #draw all objects in the list
