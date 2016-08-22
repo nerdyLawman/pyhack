@@ -1,5 +1,6 @@
 import libtcodpy as libtcod
 import math
+import textwrap
 
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
@@ -8,6 +9,10 @@ LIMIT_FPS = 20
 BAR_WIDTH = 20
 PANEL_HEIGHT = 7
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
+
+MSG_X = BAR_WIDTH + 2
+MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
+MSG_HEIGHT = PANEL_HEIGHT - 1
 
 MAP_WIDTH = 80
 MAP_HEIGHT = 43
@@ -210,10 +215,10 @@ class Fighter:
         damage = self.power - target.fighter.defense
 
         if damage > 0:
-            print(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.')
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.', libtcod.orange)
             target.fighter.take_damage(damage)
         else:
-            print(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!')
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!', libtcod.cyan)
 
 class BaseMonster:
     #basic monster ai
@@ -228,13 +233,13 @@ class BaseMonster:
 
 def player_death(player):
     global game_state
-    print('You died!')
+    message('You died!', libtcod.white)
     game_state = 'dead'
     player.char = '%'
     player.color = libtcod.dark_red
 
 def monster_death(monster):
-    print(monster.name.capitalize() + ' is dead!')
+    message(monster.name.capitalize() + ' is dead!', libtcod.cyan)
     monster.char = '%'
     monster.color = libtcod.dark_red
     monster.blocks = False
@@ -352,6 +357,20 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
         name + ': ' + str(value) + '/' + str(maximum))
 
+    y = 1
+    for (line, color) in game_msgs:
+        libtcod.console_set_default_foreground(panel, color)
+        libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
+        y += 1
+
+def message(new_msg, color=libtcod.white):
+    new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
+
+    for line in new_msg_lines:
+        if len(game_msgs) == MSG_HEIGHT:
+            del game_msgs[0]
+        game_msgs.append((line, color))
+
 def handle_keys():
     global playerx, playery, fov_recompute
 
@@ -393,6 +412,7 @@ libtcod.sys_set_fps(LIMIT_FPS)
 fighter_component = Fighter(hp=30, defense=1, power=5, death_function=player_death)
 player = Object(con, 25, 23, '@', 'Hero', libtcod.white, blocks=True, fighter=fighter_component)
 objects = [player]
+game_msgs = []
 make_map()
 
 #gui
@@ -406,6 +426,9 @@ for y in range(MAP_HEIGHT):
     for x in range(MAP_WIDTH):
         libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
 fov_recompute = True
+
+#a warm welcoming message!
+message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
 
 while not libtcod.console_is_window_closed():
 
