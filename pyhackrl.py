@@ -134,7 +134,7 @@ def make_map():
 
 class Object:
   # generic object
-  def __init__(self, con, x, y, char, name, color, blocks = False):
+  def __init__(self, con, x, y, char, name, color, blocks=False, fighter=None, ai=None):
     self.con = con
     self.x = x
     self.y = y
@@ -142,6 +142,14 @@ class Object:
     self.name = name
     self.color = color
     self.blocks = blocks
+
+    self.fighter = fighter
+    if self.fighter:
+        self.fighter.owner = self
+
+    self.ai = ai
+    if self.ai:
+        self.ai.owner = self
 
   def move(self, dx, dy):
     if not is_blocked(self.x + dx, self.y + dy):
@@ -155,6 +163,19 @@ class Object:
 
   def clear(self):
       libtcod.console_put_char(self.con, self.x, self.y, ' ', libtcod.BKGND_NONE)
+
+class Fighter:
+    #combat-related properties and methods
+    def __init__(self, hp, defense, power):
+        self.max_hp = hp
+        self.hp = hp
+        self.defense = defense
+        self.power = power
+
+class BaseMonster:
+    #basic monster ai
+    def take_turn(self):
+        print('The ' + self.owner.name + ' growls!')
 
 def player_move_or_attack(dx, dy):
     global fov_recompute
@@ -278,7 +299,8 @@ con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 libtcod.sys_set_fps(LIMIT_FPS)
 
 # player
-player = Object(con, 25, 23, '@', 'Hero', libtcod.white, True)
+fighter_component = Fighter(hp=30, defense=2, power=5)
+player = Object(con, 25, 23, '@', 'Hero', libtcod.white, blocks=True, fighter=fighter_component)
 objects = [player]
 make_map()
 
