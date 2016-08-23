@@ -1,6 +1,7 @@
 import config
 import libtcodpy as libtcod
 import math
+import textwrap
 
 class Tile:
     # map tile and properties
@@ -114,7 +115,7 @@ def make_map():
 
 class Object:
   # generic object
-  def __init__(self, con, x, y, char, name, color, blocks=False, fighter=None, ai=None):
+  def __init__(self, con, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None):
     self.con = con
     self.x = x
     self.y = y
@@ -130,6 +131,10 @@ class Object:
     self.ai = ai
     if self.ai:
         self.ai.owner = self
+
+    self.item = item
+    if self.item:
+        self.item.owner = self
 
   def move(self, dx, dy):
     if not is_blocked(self.x + dx, self.y + dy):
@@ -164,6 +169,36 @@ class Object:
   def clear(self):
       libtcod.console_put_char(self.con, self.x, self.y, ' ', libtcod.BKGND_NONE)
 
+class Item:
+    # an item that can be picked up and used
+    def __init__(self, use_function=None):
+        self.use_function = use_function
+
+    def pick_up(self):
+        #add to inv and remove from map
+        if len(inventory) >= 26:
+            message('Your inventory is full, cannot pick up ' + self.owner.name + '.', libtcod.pink)
+        else:
+            inventory.append(self.owner)
+            objects.remove(self.owner)
+            message('You picked up a ' + self.owner.name + '!', libtcod.green)
+
+    def use(self):
+        if self.use_function is None:
+            message('The ' + self.owner.name + ' cannot be used.')
+        else:
+            if self.use_function() != 'cancelled':
+                inventory.remove(self.owner)
+
+def cast_heal():
+    #heal the player
+    if player.fighter.hp == player.fighter.max_hp:
+	    message('You are already at full health.', libtcod.red)
+	    return('cancelled')
+    message('your wounds feel better.', libtcod.light_violet)
+    player.fighter.heal(HEAL_AMOUNT)
+
+
 class Fighter:
     #combat-related properties and methods
     def __init__(self, hp, defense, power, death_function=None):
@@ -181,14 +216,19 @@ class Fighter:
             if function is not None:
                 function(self.owner)
 
+    def heal(self, amount):
+		self.hp += amount
+		if self.hp > self.max_hp:
+			self.hp = self.max_hp
+
     def attack(self, target):
         damage = self.power - target.fighter.defense
 
         if damage > 0:
-            print(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.')
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.', libtcod.orange)
             target.fighter.take_damage(damage)
         else:
-            print(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!')
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!', libtcod.cyan)
 
 class BaseMonster:
     #basic monster ai
@@ -203,13 +243,13 @@ class BaseMonster:
 
 def player_death(player):
     global game_state
-    print('You died!')
+    message('You died!', libtcod.white)
     game_state = 'dead'
     player.char = '%'
     player.color = libtcod.dark_red
 
 def monster_death(monster):
-    print(monster.name.capitalize() + ' is dead!')
+    message(monster.name.capitalize() + ' is dead!', libtcod.cyan)
     monster.char = '%'
     monster.color = libtcod.dark_red
     monster.blocks = False
@@ -259,6 +299,18 @@ def place_objects(room):
                 monster = Object(con, x, y, 'T', 'Troll', libtcod.darker_purple, blocks=True, fighter=troll_fighter, ai=monster_ai)
 
             objects.append(monster)
+
+    num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
+    for i in range(num_items):
+        #place an item randomly
+        x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
+        y = libtcod.random_get_int(0, room.y1+1, room.y1-1)
+
+        if not is_blocked(x, y):
+            item_component = Item(use_function = cast_heal)
+            item = Object(con, x, y, '!', 'healing potion', libtcod.cyan, item=item_component)
+            objects.append(item)
+            item.send_to_back()
 
 def is_blocked(x, y):
     #first test the map tile
@@ -313,8 +365,12 @@ def render_all():
 
     libtcod.console_set_default_background(panel, libtcod.black)
     libtcod.console_clear(panel)
-    render_bar(1, 1, config.BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
+    # health bar
+    render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
         libtcod.light_red, libtcod.darker_red)
+    # mouse look
+    libtcod.console_set_default_foreground(panel, libtcod.light_gray)
+    libtcod.console_print_ex(panel, 1, 0, libtcod.BKGND_NONE, libtcod.LEFT, get_names_under_mouse())
     libtcod.console_blit(panel, 0, 0, config.SCREEN_WIDTH, config.PANEL_HEIGHT, 0, 0, config.PANEL_Y)
 
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
@@ -331,10 +387,78 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
         name + ': ' + str(value) + '/' + str(maximum))
 
-def handle_keys():
-    global playerx, playery, fov_recompute
+    y = 1
+    for (line, color) in game_msgs:
+        libtcod.console_set_default_foreground(panel, color)
+        libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
+        y += 1
 
+def menu(header, options, width):
+
+    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options!')
+
+    #calculate total height for the header (after auto-wrap) and one line per option
+    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    height = len(options) + header_height
+
+    #create an off-screen console that represents the menu's window
+    window = libtcod.console_new(width, height)
+
+    #print the header, with auto-wrap
+    libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+
+    y = header_height
+    letter_index = ord('a')
+    for option_text in options:
+        text = '(' + chr(letter_index) + ') ' + option_text
+        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        y += 1
+        letter_index += 1
+
+    #blit window contents
+    x = SCREEN_WIDTH/2 - width/2
+    y = SCREEN_HEIGHT/2 - height/2
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+
+    #present the root console to the player and wait for a key-press
+    libtcod.console_flush()
     key = libtcod.console_wait_for_keypress(True)
+
+    # convert ascii to index
+    index = key.c - ord('a')
+    if index >= 0 and index < len(options): return index
+    return None
+
+def inventory_menu(header):
+    # inventory
+    if len(inventory) == 0:
+        options = ['Inventory is empty']
+    else:
+        options = [item.name for item in inventory]
+    index = menu(header, options, INVENTORY_WIDTH)
+    #return selected item
+    if index is None or len(inventory) == 0: return None
+    return inventory[index].item
+
+def message(new_msg, color=libtcod.white):
+    new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
+
+    for line in new_msg_lines:
+        if len(game_msgs) == MSG_HEIGHT:
+            del game_msgs[0]
+        game_msgs.append((line, color))
+
+def get_names_under_mouse():
+    global mouse
+    (x, y) = (mouse.cx, mouse.cy)
+    names = [obj.name for obj in objects
+        if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
+    names = ', '.join(names)
+    return names.capitalize()
+
+def handle_keys():
+    global playerx, playery, fov_recompute, key
 
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         #Alt+Enter: toggle fullscreen
@@ -344,19 +468,33 @@ def handle_keys():
         return('exit')  #exit game
 
     # movement
-    if libtcod.console_is_key_pressed(libtcod.KEY_UP):
+    if key.vk == libtcod.KEY_UP:
         player_move_or_attack(0, -1)
         fov_recompute = True
-    elif libtcod.console_is_key_pressed(libtcod.KEY_DOWN):
+    elif key.vk == libtcod.KEY_DOWN:
         player_move_or_attack(0, 1)
         fov_recompute = True
-    elif libtcod.console_is_key_pressed(libtcod.KEY_LEFT):
+    elif key.vk == libtcod.KEY_LEFT:
         player_move_or_attack(-1, 0)
         fov_recompute = True
-    elif libtcod.console_is_key_pressed(libtcod.KEY_RIGHT):
+    elif key.vk == libtcod.KEY_RIGHT:
         player_move_or_attack(1, 0)
         fov_recompute = True
     else:
+        #other keys
+        key_char = chr(key.c)
+        if key_char == 'g':
+            #pick up an item
+            for obj in objects:
+                if obj.x == player.x and obj.y == player.y and obj.item:
+                    obj.item.pick_up()
+                    break
+        if key_char == 'i':
+        	#display inventory
+        	chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
+        	if chosen_item is not None:
+        	    chosen_item.use()
+
         return('no turn')
 
     return('playing')
@@ -368,10 +506,16 @@ con = libtcod.console_new(config.MAP_WIDTH, config.MAP_HEIGHT)
 
 libtcod.sys_set_fps(config.LIMIT_FPS)
 
+# controls
+mouse = libtcod.Mouse()
+key = libtcod.Key()
+
 # player
 fighter_component = Fighter(hp=30, defense=1, power=5, death_function=player_death)
 player = Object(con, 25, 23, '@', 'Hero', libtcod.white, blocks=True, fighter=fighter_component)
 objects = [player]
+inventory = []
+game_msgs = []
 make_map()
 
 #gui
@@ -386,8 +530,12 @@ for y in range(config.MAP_HEIGHT):
         libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
 fov_recompute = True
 
+#a warm welcoming message!
+message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+
 while not libtcod.console_is_window_closed():
 
+    libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
     render_all()
     libtcod.console_flush()
 
