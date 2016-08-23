@@ -1,31 +1,6 @@
+import config
 import libtcodpy as libtcod
 import math
-
-SCREEN_WIDTH = 80
-SCREEN_HEIGHT = 50
-LIMIT_FPS = 20
-
-BAR_WIDTH = 20
-PANEL_HEIGHT = 7
-PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
-
-MAP_WIDTH = 80
-MAP_HEIGHT = 43
-
-ROOM_MAX_SIZE = 10
-ROOM_MIN_SIZE = 6
-MAX_ROOMS = 30
-
-MAX_ROOM_MONSTERS = 3
-
-FOV_ALGO = 2
-FOV_LIGHT_WALLS = True
-TORCH_RADIUS = 8
-
-color_dark_wall = libtcod.Color(0, 0, 100)
-color_light_wall = libtcod.Color(130, 110, 50)
-color_dark_ground = libtcod.Color(50, 50, 100)
-color_light_ground = libtcod.Color(200, 180, 50)
 
 class Tile:
     # map tile and properties
@@ -78,19 +53,19 @@ def make_map():
 
     # fill map with unblocked tiles
     stagemap = [[ Tile(True)
-        for y in range(MAP_HEIGHT)]
-            for x in range(MAP_WIDTH)]
+        for y in range(config.MAP_HEIGHT)]
+            for x in range(config.MAP_WIDTH)]
 
     rooms = []
     num_rooms = 0
 
-    for r in range(MAX_ROOMS):
+    for r in range(config.MAX_ROOMS):
         #random width and height
-        w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+        w = libtcod.random_get_int(0, config.ROOM_MIN_SIZE, config.ROOM_MAX_SIZE)
+        h = libtcod.random_get_int(0, config.ROOM_MIN_SIZE, config.ROOM_MAX_SIZE)
         #random position without going out of the boundaries of the map
-        x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
-        y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
+        x = libtcod.random_get_int(0, 0, config.MAP_WIDTH - w - 1)
+        y = libtcod.random_get_int(0, 0, config.MAP_HEIGHT - h - 1)
 
         #"Rect" class makes rectangles easier to work with
         new_room = Rect(x, y, w, h)
@@ -266,7 +241,7 @@ def player_move_or_attack(dx, dy):
 
 def place_objects(room):
     # random number of monsters
-    num_monsters = libtcod.random_get_int(0, 0, MAX_ROOM_MONSTERS)
+    num_monsters = libtcod.random_get_int(0, 0, config.MAX_ROOM_MONSTERS)
 
     for i in range(num_monsters):
         x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
@@ -298,29 +273,33 @@ def is_blocked(x, y):
     return False
 
 def render_all():
-    global fov_map, color_dark_wall, color_light_wall
-    global color_dark_ground, color_light_ground
+    global fov_map
     global fov_recompute
+
+    color_dark_wall = config.color_dark_wall
+    color_light_wall = config.color_light_wall
+    color_dark_ground = config.color_dark_ground
+    color_light_ground = config.color_light_ground
 
     if fov_recompute:
         fov_recompute = False
-        libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
+        libtcod.map_compute_fov(fov_map, player.x, player.y, config.TORCH_RADIUS, config.FOV_LIGHT_WALLS, config.FOV_ALGO)
         #go through all tiles, and set their background color
-        for y in range(MAP_HEIGHT):
-            for x in range(MAP_WIDTH):
+        for y in range(config.MAP_HEIGHT):
+            for x in range(config.MAP_WIDTH):
                 visible = libtcod.map_is_in_fov(fov_map, x, y)
                 wall = stagemap[x][y].block_sight
                 if not visible:
                     if stagemap[x][y].explored:
                         if wall:
-                            libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET)
+                            libtcod.console_set_char_background(con, x, y, config.color_dark_wall, libtcod.BKGND_SET)
                         else:
-                            libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
+                            libtcod.console_set_char_background(con, x, y, config.color_dark_ground, libtcod.BKGND_SET)
                 else:
                     if wall:
-                        libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET)
+                        libtcod.console_set_char_background(con, x, y, config.color_light_wall, libtcod.BKGND_SET)
                     else:
-                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET)
+                        libtcod.console_set_char_background(con, x, y, config.color_light_ground, libtcod.BKGND_SET)
                     stagemap[x][y].explored = True
 
     #draw all objects in the list
@@ -330,13 +309,13 @@ def render_all():
     player.draw()
 
     #blit the contents of "con" to the root console
-    libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
+    libtcod.console_blit(con, 0, 0, config.SCREEN_WIDTH, config.SCREEN_HEIGHT, 0, 0, 0)
 
     libtcod.console_set_default_background(panel, libtcod.black)
     libtcod.console_clear(panel)
-    render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
+    render_bar(1, 1, config.BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
         libtcod.light_red, libtcod.darker_red)
-    libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
+    libtcod.console_blit(panel, 0, 0, config.SCREEN_WIDTH, config.PANEL_HEIGHT, 0, 0, config.PANEL_Y)
 
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     # render a status bar
@@ -384,10 +363,10 @@ def handle_keys():
 
 # initialization
 libtcod.console_set_custom_font('data/fonts/arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'pyHack', False)
-con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
+libtcod.console_init_root(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, 'pyHack', False)
+con = libtcod.console_new(config.MAP_WIDTH, config.MAP_HEIGHT)
 
-libtcod.sys_set_fps(LIMIT_FPS)
+libtcod.sys_set_fps(config.LIMIT_FPS)
 
 # player
 fighter_component = Fighter(hp=30, defense=1, power=5, death_function=player_death)
@@ -396,14 +375,14 @@ objects = [player]
 make_map()
 
 #gui
-panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
+panel = libtcod.console_new(config.SCREEN_WIDTH, config.PANEL_HEIGHT)
 
 game_state = 'playing'
 player_action = None
 
-fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
-for y in range(MAP_HEIGHT):
-    for x in range(MAP_WIDTH):
+fov_map = libtcod.map_new(config.MAP_WIDTH, config.MAP_HEIGHT)
+for y in range(config.MAP_HEIGHT):
+    for x in range(config.MAP_WIDTH):
         libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
 fov_recompute = True
 
