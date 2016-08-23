@@ -14,6 +14,10 @@ MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
 
+INVENTORY_WIDTH = 50
+
+HEAL_AMOUNT = 4
+
 MAP_WIDTH = 80
 MAP_HEIGHT = 43
 
@@ -201,6 +205,9 @@ class Object:
 
 class Item:
     # an item that can be picked up and used
+    def __init__(self, use_function=None):
+        self.use_function = use_function
+    
     def pick_up(self):
         #add to inv and remove from map
         if len(inventory) >= 26:
@@ -209,6 +216,22 @@ class Item:
             inventory.append(self.owner)
             objects.remove(self.owner)
             message('You picked up a ' + self.owner.name + '!', libtcod.green)
+    
+    def use(self):
+        if self.use_function is None:
+            message('The ' + self.owner.name + ' cannot be used.')
+        else:
+            if self.use_function() != 'cancelled':
+                inventory.remove(self.owner)
+	
+def cast_heal():
+    #heal the player
+    if player.fighter.hp == player.fighter.max_hp:
+	    message('You are already at full health.', libtcod.red)
+	    return('cancelled')
+    message('your wounds feel better.', libtcod.light_violet)
+    player.fighter.heal(HEAL_AMOUNT)
+		
 
 class Fighter:
     #combat-related properties and methods
@@ -226,6 +249,11 @@ class Fighter:
             function = self.death_function
             if function is not None:
                 function(self.owner)
+    
+    def heal(self, amount):
+		self.hp += amount
+		if self.hp > self.max_hp:
+			self.hp = self.max_hp
 
     def attack(self, target):
         damage = self.power - target.fighter.defense
@@ -313,7 +341,7 @@ def place_objects(room):
         y = libtcod.random_get_int(0, room.y1+1, room.y1-1)
 
         if not is_blocked(x, y):
-            item_component = Item()
+            item_component = Item(use_function = cast_heal)
             item = Object(con, x, y, '!', 'healing potion', libtcod.cyan, item=item_component)
             objects.append(item)
             item.send_to_back()
@@ -395,6 +423,54 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
         libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
         y += 1
 
+def menu(header, options, width):
+	
+    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options!')
+    
+    #calculate total height for the header (after auto-wrap) and one line per option
+    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    height = len(options) + header_height
+    
+    #create an off-screen console that represents the menu's window
+    window = libtcod.console_new(width, height)
+    
+    #print the header, with auto-wrap
+    libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+    
+    y = header_height
+    letter_index = ord('a')
+    for option_text in options:
+        text = '(' + chr(letter_index) + ') ' + option_text
+        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        y += 1
+        letter_index += 1
+        
+    #blit window contents
+    x = SCREEN_WIDTH/2 - width/2
+    y = SCREEN_HEIGHT/2 - height/2
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+    
+    #present the root console to the player and wait for a key-press
+    libtcod.console_flush()
+    key = libtcod.console_wait_for_keypress(True)
+    
+    # convert ascii to index
+    index = key.c - ord('a')
+    if index >= 0 and index < len(options): return index
+    return None
+
+def inventory_menu(header):
+    # inventory
+    if len(inventory) == 0:
+        options = ['Inventory is empty']
+    else:
+        options = [item.name for item in inventory]
+    index = menu(header, options, INVENTORY_WIDTH)
+    #return selected item
+    if index is None or len(inventory) == 0: return None
+    return inventory[index].item
+
 def message(new_msg, color=libtcod.white):
     new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
 
@@ -443,6 +519,12 @@ def handle_keys():
                 if obj.x == player.x and obj.y == player.y and obj.item:
                     obj.item.pick_up()
                     break
+        if key_char == 'i':
+        	#display inventory
+        	chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
+        	if chosen_item is not None:
+        	    chosen_item.use()
+        	
         return('no turn')
 
     return('playing')
