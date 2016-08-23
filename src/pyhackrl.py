@@ -300,7 +300,7 @@ def place_objects(room):
 
             objects.append(monster)
 
-    num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
+    num_items = libtcod.random_get_int(0, 0, config.MAX_ROOM_ITEMS)
     for i in range(num_items):
         #place an item randomly
         x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
@@ -366,7 +366,7 @@ def render_all():
     libtcod.console_set_default_background(panel, libtcod.black)
     libtcod.console_clear(panel)
     # health bar
-    render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
+    render_bar(1, 1, config.BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
         libtcod.light_red, libtcod.darker_red)
     # mouse look
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -390,7 +390,7 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     y = 1
     for (line, color) in game_msgs:
         libtcod.console_set_default_foreground(panel, color)
-        libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
+        libtcod.console_print_ex(panel, config.MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
         y += 1
 
 def menu(header, options, width):
@@ -442,10 +442,10 @@ def inventory_menu(header):
     return inventory[index].item
 
 def message(new_msg, color=libtcod.white):
-    new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
+    new_msg_lines = textwrap.wrap(new_msg, config.MSG_WIDTH)
 
     for line in new_msg_lines:
-        if len(game_msgs) == MSG_HEIGHT:
+        if len(game_msgs) == config.MSG_HEIGHT:
             del game_msgs[0]
         game_msgs.append((line, color))
 
