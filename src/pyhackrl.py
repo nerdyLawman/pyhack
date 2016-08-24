@@ -41,6 +41,8 @@ FOV_ALGO = 2
 FOV_LIGHT_WALLS = True
 TORCH_RADIUS = 8
 
+selected = 0
+
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
 color_dark_ground = libtcod.Color(50, 50, 100)
@@ -94,7 +96,8 @@ def create_v_tunnel(y1, y2, x):
         stagemap[x][y].block_sight = False
 
 def make_map():
-    global stagemap, player
+    global stagemap, objects
+    objects = [player]
 
     # fill map with unblocked tiles
     stagemap = [[ Tile(True)
@@ -549,11 +552,13 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
         y += 1
 
 def menu(header, options, width):
-
+    global selected
     if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options!')
 
     #calculate total height for the header (after auto-wrap) and one line per option
     header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    if header == '':
+        header_height = 0
     height = len(options) + header_height
 
     #create an off-screen console that represents the menu's window
@@ -579,11 +584,24 @@ def menu(header, options, width):
     #present the root console to the player and wait for a key-press
     libtcod.console_flush()
     key = libtcod.console_wait_for_keypress(True)
+    if key.vk == libtcod.KEY_DOWN:
+        if selected < len(options):
+            selected += 1
+    elif key.vk == libtcod.KEY_UP:
+        if selected > 1:
+            selected -= 1
+    elif key.vk == libtcod.KEY_ENTER:
+        return(selected-1)
+    elif key.vk == libtcod.KEY_ESCAPE:
+        return None
+    libtcod.console_set_default_background(window, libtcod.light_yellow)
+    libtcod.console_rect(window, 0, selected-1+header_height, 100, 1, True, libtcod.BKGND_SET)
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
 
     # convert ascii to index
     index = key.c - ord('a')
     if index >= 0 and index < len(options): return index
-    return None
+    return 'no selection'
 
 def inventory_menu(header):
     # inventory
@@ -593,6 +611,8 @@ def inventory_menu(header):
         options = [item.name for item in inventory]
     index = menu(header, options, INVENTORY_WIDTH)
     #return selected item
+    while index == 'no selection':
+        index = menu(header, options, INVENTORY_WIDTH)
     if index is None or len(inventory) == 0: return None
     return inventory[index].item
 
@@ -645,10 +665,11 @@ def handle_keys():
                     obj.item.pick_up()
                     break
         if key_char == 'i':
-        	#display inventory
-        	chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
-        	if chosen_item is not None:
-        	    chosen_item.use()
+            #display inventory
+            selection = 0
+            chosen_item = inventory_menu('Press the key next to an item to use it, or ESC to cancel\n')
+            if chosen_item is not None:
+                chosen_item.use()
         if key_char == 'd':
             chosen_item = inventory_menu('Press the key next to an item to drop it.\n')
             if chosen_item is not None:
@@ -660,6 +681,78 @@ def handle_keys():
 
     return('playing')
 
+def main_menu():
+    #img = libtcod.image_load('bgk.png')
+    while not libtcod.console_is_window_closed():
+        choice = menu('', ['New Game', 'Continue', 'Quit'], 24)
+        if choice == 0:
+            new_game()
+            play_game()
+        elif choice == 2:
+            break
+
+def new_game():
+    global player, panel, inventory, game_msgs, game_state
+    # player
+    fighter_component = Fighter(hp=30, defense=1, power=5, death_function=player_death)
+    player = Object(con, 25, 23, '@', 'Hero', libtcod.white, blocks=True, fighter=fighter_component)
+    make_map()
+
+    #gui
+    panel = libtcod.console_new(config.SCREEN_WIDTH, config.PANEL_HEIGHT)
+
+    game_state = 'playing'
+    inventory = []
+    game_msgs = []
+    initialize_fov()
+    initialize_gamedata()
+    #a warm welcoming message!
+    message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+
+
+def initialize_fov():
+    global fov_recompute, fov_map
+    fov_recompute = True
+    fov_map = libtcod.map_new(config.MAP_WIDTH, config.MAP_HEIGHT)
+    for y in range(config.MAP_HEIGHT):
+        for x in range(config.MAP_WIDTH):
+            libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
+
+def initialize_gamedata():
+    global start_monster_count, monster_count, start_item_count, item_count
+    start_monster_count = 0
+    start_item_count = 0
+    for obj in objects:
+        if obj.ai:
+            start_monster_count += 1
+        if obj.item:
+            start_item_count += 1
+    monster_count = start_monster_count
+    item_count = start_item_count
+
+def play_game():
+    global key, mouse
+    player_action = None
+    # controls
+    mouse = libtcod.Mouse()
+    key = libtcod.Key()
+
+    while not libtcod.console_is_window_closed():
+
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
+        render_all()
+        libtcod.console_flush()
+        for obj in objects:
+            obj.clear()
+
+        player_action = handle_keys()
+        if player_action == 'exit':
+            break
+        if game_state == 'playing' and player_action != 'no turn':
+            for obj in objects:
+                if obj.ai:
+                    obj.ai.take_turn()
+
 # initialization
 libtcod.console_set_custom_font('data/fonts/arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_init_root(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, 'pyHack', False)
@@ -667,57 +760,10 @@ con = libtcod.console_new(config.MAP_WIDTH, config.MAP_HEIGHT)
 
 libtcod.sys_set_fps(config.LIMIT_FPS)
 
-# controls
-mouse = libtcod.Mouse()
-key = libtcod.Key()
+libtcod.console_set_default_foreground(0, libtcod.light_yellow)
+libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER,
+    'PYHACKRL')
+libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-3, libtcod.BKGND_NONE, libtcod.CENTER,
+    'by Norf Launmen')
 
-# player
-fighter_component = Fighter(hp=30, defense=1, power=5, death_function=player_death)
-player = Object(con, 25, 23, '@', 'Hero', libtcod.white, blocks=True, fighter=fighter_component)
-objects = [player]
-inventory = []
-game_msgs = []
-make_map()
-
-#gui
-panel = libtcod.console_new(config.SCREEN_WIDTH, config.PANEL_HEIGHT)
-
-game_state = 'playing'
-player_action = None
-
-fov_map = libtcod.map_new(config.MAP_WIDTH, config.MAP_HEIGHT)
-for y in range(config.MAP_HEIGHT):
-    for x in range(config.MAP_WIDTH):
-        libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
-fov_recompute = True
-
-start_monster_count = 0
-start_item_count = 0
-for obj in objects:
-    if obj.ai:
-        start_monster_count += 1
-    if obj.item:
-        start_item_count += 1
-monster_count = start_monster_count
-item_count = start_item_count
-
-#a warm welcoming message!
-message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
-
-while not libtcod.console_is_window_closed():
-
-    libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
-    render_all()
-    libtcod.console_flush()
-
-    for obj in objects:
-        obj.clear()
-
-    if game_state == 'playing':
-        player_action = handle_keys()
-    if game_state == 'playing' and player_action != 'no turn':
-        for obj in objects:
-            if obj.ai:
-                obj.ai.take_turn()
-    if game_state == 'exit' or game_state == 'dead':
-        break
+main_menu()
