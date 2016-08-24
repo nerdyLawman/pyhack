@@ -1,5 +1,12 @@
 import libtcodpy as libtcod
 
+GAME_STATE = 'playing'
+ACTIVE_OBJECTS = []
+
+GAME_MSGS = []
+MOUSE = libtcod.Mouse()
+KEY = libtcod.Key()
+
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
 LIMIT_FPS = 20
@@ -26,7 +33,10 @@ MAX_ROOMS = 30
 MAX_ROOM_MONSTERS = 3
 MAX_ROOM_ITEMS = 2
 
+FOV_MAP = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
 FOV_ALGO = 2
+FOV_RECOMPUTE = True
+
 FOV_LIGHT_WALLS = True
 TORCH_RADIUS = 8
 
