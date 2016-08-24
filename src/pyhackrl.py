@@ -20,12 +20,12 @@ LIGHTNING_RANGE = 5
 LIGHTNING_DAMAGE = 10
 
 FIREBALL_RADIUS = 4
-FIREBALL_DAMAGE = 8
+FIREBALL_DAMAGE = 11
 
 CONFUSE_NUM_TURNS = 10
 CONFUSE_RANGE = 8
 
-HEAL_AMOUNT = 4
+HEAL_AMOUNT = 6
 
 MAP_WIDTH = 80
 MAP_HEIGHT = 43
@@ -278,7 +278,7 @@ def cast_fireball():
     for obj in objects:
         #damage everything in radius
         if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
-            message('The ' + obj.name + 'gets burned for ' + str(FIREBALL_DAMAGE) + ' hp.', libtcod.orange)
+            message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hp.', libtcod.orange)
             obj.fighter.take_damage(FIREBALL_DAMAGE)
 
 def cast_confusion():
@@ -525,7 +525,7 @@ def render_all():
     # monsters bar
     render_bar(1, 3, config.BAR_WIDTH, 'MONSTERS', monster_count, start_monster_count, libtcod.light_blue, libtcod.darker_blue)
     # items bar
-    render_bar(1, 5, config.BAR_WIDTH, 'ITEMS', item_count, start_item_count, libtcod.desaturated_green, libtcod.darker_green)
+    render_bar(1, 5, config.BAR_WIDTH, 'ITEMS', item_count, start_item_count, libtcod.light_violet, libtcod.darker_violet)
     # mouse look
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
     libtcod.console_print_ex(panel, 1, 0, libtcod.BKGND_NONE, libtcod.LEFT, get_names_under_mouse())
@@ -666,7 +666,7 @@ def handle_keys():
                     break
         if key_char == 'i':
             #display inventory
-            selection = 0
+            selection = -1
             chosen_item = inventory_menu('Press the key next to an item to use it, or ESC to cancel\n')
             if chosen_item is not None:
                 chosen_item.use()
