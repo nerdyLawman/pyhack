@@ -81,6 +81,8 @@ def handle_keys():
         	chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
         	if chosen_item is not None:
         	    chosen_item.use()
+        if key_char == 'f':
+            libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
 
         return('no turn')
 
