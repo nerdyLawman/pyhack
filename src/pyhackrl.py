@@ -16,6 +16,14 @@ MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
 
 INVENTORY_WIDTH = 50
+LIGHTNING_RANGE = 5
+LIGHTNING_DAMAGE = 10
+
+FIREBALL_RADIUS = 4
+FIREBALL_DAMAGE = 8
+
+CONFUSE_NUM_TURNS = 10
+CONFUSE_RANGE = 8
 
 HEAL_AMOUNT = 4
 
@@ -191,6 +199,9 @@ class Object:
     dy = other.y - self.y
     return math.sqrt(dx ** 2 + dy ** 2)
 
+  def distance(self, x, y):
+      return math.sqrt((x - self.x) **  2 + (y - self.y) ** 2)
+
   def send_to_back(self):
       global objects
       objects.remove(self)
@@ -211,6 +222,7 @@ class Item:
         self.use_function = use_function
 
     def pick_up(self):
+        global item_count
         #add to inv and remove from map
         if len(inventory) >= 26:
             message('Your inventory is full, cannot pick up ' + self.owner.name + '.', libtcod.pink)
@@ -218,6 +230,17 @@ class Item:
             inventory.append(self.owner)
             objects.remove(self.owner)
             message('You picked up a ' + self.owner.name + '!', libtcod.green)
+            item_count -= 1
+
+    def drop(self):
+        global item_count
+        #drop objects
+        objects.append(self.owner)
+        inventory.remove(self.owner)
+        self.owner.x = player.x
+        self.owner.y = player.y
+        message('You dropped ' + self.owner.name + '.', libtcod.yellow)
+        item_count += 1
 
     def use(self):
         if self.use_function is None:
@@ -234,6 +257,35 @@ def cast_heal():
     message('your wounds feel better.', libtcod.light_violet)
     player.fighter.heal(HEAL_AMOUNT)
 
+def cast_lightning():
+    #find nearest enemy and shock them with your deviant behaviour
+    monster = closest_monster(LIGHTNING_RANGE)
+    if monster is None:
+        message('No enemy is close enough to be shocked by you.', libtcod.red)
+        return 'cancelled'
+    message('A lightning bold strikes the ' + monster.name + ', ZAP! For ' + str(LIGHTNING_DAMAGE) + ' damage.', libtcod.light_blue)
+    monster.fighter.take_damage(LIGHTNING_DAMAGE)
+
+def cast_fireball():
+    message('Left-click a target tile, right-click to cancel.', libtcod.light_cyan)
+    (x, y) = target_tile()
+    if x is None: return 'cancelled'
+    message('The fireball explodes burning everything in range.', libtcod.orange)
+
+    for obj in objects:
+        #damage everything in radius
+        if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
+            message('The ' + obj.name + 'gets burned for ' + str(FIREBALL_DAMAGE) + ' hp.', libtcod.orange)
+            obj.fighter.take_damage(FIREBALL_DAMAGE)
+
+def cast_confusion():
+    message('left-click an enemy to confuse. Right-click to cancel.', libtcod.light_cyan)
+    monster = target_monster(CONFUSE_RANGE)
+    if monster is None: return 'cancelled'
+    old_ai = monster.ai
+    monster.ai = ConfusedMonster(old_ai)
+    monster.ai.owner = monster
+    message('The monster feels very confused', libtcod.light_green)
 
 class Fighter:
     #combat-related properties and methods
@@ -277,6 +329,19 @@ class BaseMonster:
             elif player.fighter.hp > 0:
                 monster.fighter.attack(player)
 
+class ConfusedMonster:
+    def __init__(self, old_ai, num_turns=CONFUSE_NUM_TURNS):
+        self.old_ai = old_ai
+        self.num_turns = num_turns
+
+    def take_turn(self):
+        if self.num_turns > 0:
+            self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+            self.num_turns -= 1
+        else:
+            self.owner.ai = self.old_ai
+            message('The ' + self.owner.name + ' is no longer confuse', libtcod.red)
+
 def player_death(player):
     global game_state
     message('You died!', libtcod.white)
@@ -285,6 +350,7 @@ def player_death(player):
     player.color = libtcod.dark_red
 
 def monster_death(monster):
+    global monster_count
     message(monster.name.capitalize() + ' is dead!', libtcod.cyan)
     monster.char = '%'
     monster.color = libtcod.dark_red
@@ -292,7 +358,45 @@ def monster_death(monster):
     monster.fighter = None
     monster.ai = None
     monster.name = 'remains of ' + monster.name
+    monster_count -= 1
     monster.send_to_back()
+
+def closest_monster(max_range):
+    #find closest enemy to max range and in FOV
+    closest_enemy = None
+    closest_dist = max_range + 1
+
+    for obj in objects:
+        if obj.fighter and not obj == player and libtcod.map_is_in_fov(fov_map, obj.x, obj.y):
+            dist = player.distance_to(obj)
+            if dist < closest_dist:
+                closest_enemy = obj
+                closest_dist = dist
+    return closest_enemy
+
+def target_tile(max_range=None):
+    global key, mouse
+    while True:
+        libtcod.console_flush()
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse)
+        render_all()
+
+        (x, y) = (mouse.cx, mouse.cy)
+        if (mouse.lbutton_pressed and libtcod.map_is_in_fov(fov_map, x, y) and
+            (max_range is None or player.distance(x, y) <= max_range)):
+            return(x, y)
+        if mouse.rbutton_pressed or key.vk == libtcod.KEY_ESCAPE:
+            return(None, None)
+
+def target_monster(max_range=None):
+    while True:
+        (x, y) = target_tile(max_range)
+        if x is None:
+            return None
+
+        for obj in objects:
+            if obj.x == x and obj.y == y and obj.fighter and obj != player:
+                return obj
 
 def player_move_or_attack(dx, dy):
     global fov_recompute
@@ -343,8 +447,19 @@ def place_objects(room):
         y = libtcod.random_get_int(0, room.y1+1, room.y1-1)
 
         if not is_blocked(x, y):
-            item_component = Item(use_function = cast_heal)
-            item = Object(con, x, y, '!', 'healing potion', libtcod.cyan, item=item_component)
+            dice = libtcod.random_get_int(0, 0, 100)
+            if dice < 70:
+                item_component = Item(use_function = cast_heal)
+                item = Object(con, x, y, '!', 'healing potion', libtcod.cyan, item=item_component)
+            elif dice < 70+10:
+                item_component = Item(use_function = cast_lightning)
+                item = Object(con, x, y, 'Z', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
+            elif dice < 70+10+10:
+                item_component = Item(use_function=cast_fireball)
+                item = Object(con, x, y, '#', 'scroll of fireball', libtcod.light_red, item=item_component)
+            else:
+                item_component = Item(use_function = cast_confusion)
+                item = Object(con, x, y, '*', 'scroll of confusion', libtcod.light_orange, item=item_component)
             objects.append(item)
             item.send_to_back()
 
@@ -404,6 +519,10 @@ def render_all():
     # health bar
     render_bar(1, 1, config.BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
         libtcod.light_red, libtcod.darker_red)
+    # monsters bar
+    render_bar(1, 3, config.BAR_WIDTH, 'MONSTERS', monster_count, start_monster_count, libtcod.light_blue, libtcod.darker_blue)
+    # items bar
+    render_bar(1, 5, config.BAR_WIDTH, 'ITEMS', item_count, start_item_count, libtcod.desaturated_green, libtcod.darker_green)
     # mouse look
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
     libtcod.console_print_ex(panel, 1, 0, libtcod.BKGND_NONE, libtcod.LEFT, get_names_under_mouse())
@@ -530,6 +649,10 @@ def handle_keys():
         	chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
         	if chosen_item is not None:
         	    chosen_item.use()
+        if key_char == 'd':
+            chosen_item = inventory_menu('Press the key next to an item to drop it.\n')
+            if chosen_item is not None:
+                chosen_item.drop()
         if key_char == 'f':
             libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
 
@@ -567,6 +690,16 @@ for y in range(config.MAP_HEIGHT):
     for x in range(config.MAP_WIDTH):
         libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
 fov_recompute = True
+
+start_monster_count = 0
+start_item_count = 0
+for obj in objects:
+    if obj.ai:
+        start_monster_count += 1
+    if obj.item:
+        start_item_count += 1
+monster_count = start_monster_count
+item_count = start_item_count
 
 #a warm welcoming message!
 message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)

@@ -15,6 +15,18 @@ def monster_death(monster):
     monster.name = 'remains of ' + monster.name
     monster.send_to_back()
 
+def closest_monster(max_range):
+    #find closest enemy to max range and in FOV
+    closest_enemy = None
+    closest_dist = max_range + 1
+
+    for obj in objects:
+        if obj.fighter and not obj == player and libtcod.map_is_in_fov(fov_map, obj.x, obj.y):
+            dist = player.distance_to(obj)
+            if dist < closest_dist:
+                closest_enemy = obj
+                closest_dist = dist
+    return closest_enemy
 
 def cast_heal():
     # heal the player
@@ -23,6 +35,15 @@ def cast_heal():
         return('cancelled')
     interface_helpers.message('your wounds feel better.', libtcod.light_violet)
     player.fighter.heal(HEAL_AMOUNT)
+
+def cast_lightning():
+    #find nearest enemy and shock them with your deviant behaviour
+    monster = closest_monster(LIGHTNING_RANGE)
+    if monster is None:
+        message('No enemy is close enough to be shocked by you.', libtcod.red)
+        return 'cancelled'
+    message('A lightning bold strikes the ' + monster.name + ', ZAP! For ' + str(LIGHTNING_DAMAGE) + ' damage.', libtcod.light_blue)
+    monster.fighter.take_damage(LIGHTNING_DAMAGE)
 
 
 def player_move_or_attack(dx, dy):
