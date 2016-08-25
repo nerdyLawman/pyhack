@@ -6,7 +6,7 @@ class Tile:
         if block_sight is None: block_sight = blocked
         self.block_sight = block_sight
 
-class Rect:
+class RectRoom:
     # rectangular room
     def __init__(self, x, y, w, h):
         self.x1 = x

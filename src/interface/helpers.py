@@ -3,9 +3,6 @@ import gameconfig
 import textwrap
 from interface import interfaceconfig
 
-#gui
-panel = libtcod.console_new(gameconfig.SCREEN_WIDTH, gameconfig.PANEL_HEIGHT)
-
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     # render a status bar
     bar_width = int(float(value) / maximum * total_width)
@@ -21,17 +18,20 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
         name + ': ' + str(value) + '/' + str(maximum))
 
     y = 1
-    for (line, color) in gameconfig.GAME_MSGS:
+    for (line, color) in game_msgs:
         libtcod.console_set_default_foreground(panel, color)
         libtcod.console_print_ex(panel, gameconfig.MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
         y += 1
 
-def menu(header, options, width):
-
+def menu(con, header, options, width):
+    # general selection menu
+    selected = 0
     if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options!')
 
-    #calculate total height for the header (after auto-wrap) and one line per option
-    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    # calculate total height for the header (after auto-wrap) and one line per option
+    header_height = libtcod.console_get_height_rect(con, 0, 0, width, gameconfig.SCREEN_HEIGHT, header)
+    if header == '':
+        header_height = 0
     height = len(options) + header_height
 
     #create an off-screen console that represents the menu's window
@@ -50,18 +50,52 @@ def menu(header, options, width):
         letter_index += 1
 
     #blit window contents
-    x = SCREEN_WIDTH/2 - width/2
-    y = SCREEN_HEIGHT/2 - height/2
+    x = gameconfig.SCREEN_WIDTH/2 - width/2
+    y = gameconfig.SCREEN_HEIGHT/2 - height/2
     libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
 
     #present the root console to the player and wait for a key-press
     libtcod.console_flush()
     key = libtcod.console_wait_for_keypress(True)
+    if key.vk == libtcod.KEY_DOWN:
+        if selected < len(options):
+            selected += 1
+        else:
+            selected = 1
+    elif key.vk == libtcod.KEY_UP:
+        if selected > 1:
+            selected -= 1
+        else:
+            selected = len(options)
+    elif key.vk == libtcod.KEY_ENTER:
+        return(selected-1)
+    elif key.vk == libtcod.KEY_ESCAPE:
+        return None
+    libtcod.console_set_default_background(window, libtcod.light_yellow)
+    libtcod.console_rect(window, 0, selected-1+header_height, 100, 1, True, libtcod.BKGND_SET)
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
 
     # convert ascii to index
     index = key.c - ord('a')
     if index >= 0 and index < len(options): return index
-    return None
+    return 'no selection'
+
+def main_menu(con):
+    #img = libtcod.image_load('bgk.png')
+    while not libtcod.console_is_window_closed():
+        choice = menu(con, '', ['New Game', 'Continue', 'Quit'], 24)
+        if choice == 0:
+            new_game()
+            play_game()
+        if choice == 1:
+            try:
+                load_game()
+            except:
+                message_box('\n No saved gamedata to load.\n', 24)
+                continue
+            play_game()
+        elif choice == 2:
+            break
 
 def inventory_menu(header):
     # inventory
@@ -69,23 +103,22 @@ def inventory_menu(header):
         options = ['Inventory is empty']
     else:
         options = [item.name for item in inventory]
-    index = menu(header, options, INVENTORY_WIDTH)
+    index = 'no selection'
     #return selected item
+    while index == 'no selection':
+        index = menu(header, options, INVENTORY_WIDTH)
     if index is None or len(inventory) == 0: return None
     return inventory[index].item
 
 def message(new_msg, color=libtcod.white):
+    # play by play message display
     new_msg_lines = textwrap.wrap(new_msg, gameconfig.MSG_WIDTH)
 
     for line in new_msg_lines:
-        if len(gameconfig.GAME_MSGS) == gameconfig.MSG_HEIGHT:
-            del gameconfig.GAME_MSGS[0]
-        gameconfig.GAME_MSGS.append((line, color))
+        if len(game_msgs) == gameconfig.MSG_HEIGHT:
+            del game_msgs[0]
+        game_msgs.append((line, color))
 
-def get_names_under_mouse():
-    (x, y) = (interfaceconfig.MOUSE.cx, interfaceconfig.MOUSE.cy)
-    names = [obj.name for obj in gameconfig.ACTIVE_OBJECTS
-        if obj.x == x and obj.y == y and libtcod.map_is_in_fov(gameconfig.FOV_MAP, obj.x, obj.y)]
-    names = ', '.join(names)
-    return names.capitalize()
-
+def message_box(text, width=50):
+    # popup message box
+    menu(text, [], width)
