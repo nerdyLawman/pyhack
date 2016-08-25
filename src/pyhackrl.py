@@ -457,6 +457,21 @@ def check_level_up():
         elif choice == 2:
             player.fighter.defense += 1
 
+def random_choice_index(chances):
+    dice = libtcod.random_get_int(0, 1, sum(chances))
+    running_sum = 0
+    choice = 0
+    for w in chances:
+        running_sum += w
+        if dice <= running_sum:
+            return choice
+        choice += 1
+
+def random_choice(chances_dict):
+    chances = chances_dict.values()
+    strings = chances_dict.keys()
+    return strings[random_choice_index(chances)]
+
 def place_objects(room):
     # random number of monsters
     num_monsters = libtcod.random_get_int(0, 0, config.MAX_ROOM_MONSTERS)
@@ -467,11 +482,13 @@ def place_objects(room):
 
         if not is_blocked(x, y):
             monster_ai = BaseMonster()
-            if libtcod.random_get_int(0, 0, 100) < 80:  #80% chance of getting an orc
+            monster_chances = {'orc': 80, 'troll': 20}
+            dice = random_choice(monster_chances)
+            if dice == 'orc':  #80% chance of getting an orc
                 #create an orc
                 orc_fighter = Fighter(hp=6, defense=0, power=2, xp=10, death_function=monster_death)
                 monster = Object(con, x, y, 'O', 'Orc', libtcod.desaturated_green, blocks=True, fighter=orc_fighter, ai=monster_ai)
-            else:
+            elif dice == 'troll':
                 #create a troll
                 troll_fighter = Fighter(hp=10, defense=0, power=3, xp=30, death_function=monster_death)
                 monster = Object(con, x, y, 'T', 'Troll', libtcod.darker_purple, blocks=True, fighter=troll_fighter, ai=monster_ai)
@@ -485,17 +502,18 @@ def place_objects(room):
         y = libtcod.random_get_int(0, room.y1+1, room.y1-1)
 
         if not is_blocked(x, y):
-            dice = libtcod.random_get_int(0, 0, 100)
-            if dice < 70:
+            item_chances = {'heal': 70, 'lightning': 10, 'fireball': 10, 'confuse': 10}
+            dice = random_choice(item_chances)
+            if dice == 'heal':
                 item_component = Item(use_function = cast_heal)
                 item = Object(con, x, y, '!', 'healing potion', libtcod.cyan, item=item_component)
-            elif dice < 70+10:
+            elif dice == 'lightning':
                 item_component = Item(use_function = cast_lightning)
                 item = Object(con, x, y, 'Z', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
-            elif dice < 70+10+10:
+            elif dice == 'fireball':
                 item_component = Item(use_function=cast_fireball)
                 item = Object(con, x, y, '#', 'scroll of fireball', libtcod.light_red, item=item_component)
-            else:
+            elif dice == 'confuse':
                 item_component = Item(use_function = cast_confusion)
                 item = Object(con, x, y, '*', 'scroll of confusion', libtcod.light_orange, item=item_component)
             objects.append(item)
@@ -775,8 +793,10 @@ def new_game():
     game_state = 'playing'
     inventory = []
     game_msgs = []
+    
+    initialize_leveldata()
     initialize_fov()
-    initialize_gamedata()
+
     #a warm welcoming message!
     message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
 
@@ -789,7 +809,7 @@ def initialize_fov():
         for x in range(config.MAP_WIDTH):
             libtcod.map_set_properties(fov_map, x, y, not stagemap[x][y].block_sight, not stagemap[x][y].blocked)
 
-def initialize_gamedata():
+def initialize_leveldata():
     global start_monster_count, monster_count, start_item_count, item_count
     start_monster_count = 0
     start_item_count = 0
@@ -862,6 +882,7 @@ def next_level():
     message('After a moment of peace, you descend deeper into the depths of horror.', libtcod.dark_red)
     dungeon_level += 1
     make_map()
+    initialize_leveldata()
     initialize_fov()
 
 # initialization
